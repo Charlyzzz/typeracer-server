@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package typeracer;
+
+import "google/protobuf/timestamp.proto";
+
+
+service TypeRacer {
+    rpc SendPlayerMetrics (stream PlayerMetrics) returns (stream Scoreboard) { }
+}
+
+message PlayerMetrics {
+    string username = 1;
+    int32 strokesPerMinute = 2;
+    google.protobuf.Timestamp connectionTime = 3;
+}
+
+message Scoreboard {
+    repeated PlayerMetrics reply = 1;
+}
