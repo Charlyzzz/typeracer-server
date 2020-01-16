@@ -1,44 +1,37 @@
 package typeracer
 
 import akka.NotUsed
-import akka.stream.Materializer
-import akka.stream.scaladsl.{BroadcastHub, Flow, Keep, MergeHub, Source}
+import akka.actor.ActorSystem
+import akka.stream._
+import akka.stream.scaladsl.{BroadcastHub, Keep, MergeHub, Source}
+import typeracer.flow.GroupedWithTimeout._
+import typeracer.flow.ScoreboardFlow
 
-import scala.collection.mutable
+import scala.concurrent.duration._
 
-class TypeRacerImpl(implicit val materializer: Materializer) extends TypeRacer {
+class TypeRacerImpl(implicit val system: ActorSystem) extends TypeRacer {
 
+  implicit val materializer: Materializer = ActorMaterializer()
+  val log = system.log
 
-  val (sink, source) = MergeHub.source[PlayerMetrics]
-    .via(TypeRacerImpl.flow)
+  val ((sink, metrics), source) = MergeHub.source[PlayerSpeed]
+    .viaMat(new ScoreboardFlow(5.seconds))(Keep.both)
     .toMat(BroadcastHub.sink[Scoreboard])(Keep.both).run()
 
-  override def sendPlayerMetrics(in: Source[PlayerMetrics, NotUsed]): Source[Scoreboard, NotUsed] = {
+  metrics
+    .groupedWithTimeout(20, 5.seconds)
+    .map(_.last)
+    .runForeach(flowMetric => log.info(s"$flowMetric"))
+
+  override def sendPlayerMetrics(in: Source[PlayerSpeed, NotUsed]): Source[Scoreboard, NotUsed] = {
     in.runWith(sink)
     source
   }
 }
 
-object TypeRacerImpl {
-  val flow = Flow[PlayerMetrics].statefulMapConcat { () =>
-    var times = 0
-    var timesSent = 0
-    val players: mutable.Map[String, PlayerMetrics] = mutable.Map()
-    var currentTopTen: List[PlayerMetrics] = List()
+case class FlowMetric(metricsReceived: Int, scoreboardEmitted: Int)
 
-    playerMetric =>
-      times += 1
-      val previousMetric = players.put(playerMetric.username, playerMetric)
-      val playerJoined = previousMetric.exists(_.connectionTime != playerMetric.connectionTime)
-      val topTen = players.values.toList.sortBy(_.strokesPerMinute).reverse.take(10)
-      val shouldBroadcastTopTen = topTen != currentTopTen || playerJoined
-      if (shouldBroadcastTopTen) {
-        currentTopTen = topTen
-        timesSent += 1
-        List(Scoreboard(topTen))
-      }
-      else
-        List()
-  }
-
+object FlowMetric {
+  val initial: FlowMetric = FlowMetric(0, 0)
 }
+

@@ -2,19 +2,21 @@ syntax = "proto3";
 
 package typeracer;
 
-import "google/protobuf/timestamp.proto";
+import "scalapb/scalapb.proto";
 
 
 service TypeRacer {
-    rpc SendPlayerMetrics (stream PlayerMetrics) returns (stream Scoreboard) { }
+    rpc SendPlayerMetrics (stream PlayerSpeed) returns (stream Scoreboard) { }
 }
 
-message PlayerMetrics {
+message PlayerSpeed {
     string username = 1;
     int32 strokesPerMinute = 2;
-    google.protobuf.Timestamp connectionTime = 3;
 }
 
 message Scoreboard {
-    repeated PlayerMetrics reply = 1;
+    option (scalapb.message).companion_extends = "typeracer.scoreboard.ScoreboardCompanion";
+
+    repeated PlayerSpeed topTen = 1;
+    repeated PlayerSpeed afkPlayers = 2;
 }
