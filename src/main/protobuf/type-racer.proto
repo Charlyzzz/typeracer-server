@@ -3,9 +3,10 @@ syntax = "proto3";
 package typeracer;
 
 import "scalapb/scalapb.proto";
-
+import "google/protobuf/empty.proto";
 
 service TypeRacer {
+    rpc Dashboard (google.protobuf.Empty) returns (Scoreboard) { }
     rpc SendPlayerMetrics (stream PlayerSpeed) returns (stream Scoreboard) { }
 }
 

@@ -14,7 +14,7 @@ class GameSpec extends AnyFreeSpec with Matchers {
     "si se registra solo una velocidad el top ten va a estar compuesto solo ella" in {
       val game = new Game()
       val velocidadDeMati = PlayerSpeed("mati", 10)
-      game.registrarVelocidadDeJugador(velocidadDeMati)
+      game.trackPlayerSpeed(velocidadDeMati)
       game.scoreboard shouldBe Scoreboard(List(velocidadDeMati))
     }
 
@@ -22,17 +22,17 @@ class GameSpec extends AnyFreeSpec with Matchers {
       val game = new Game()
       val velocidadDeMati = PlayerSpeed("mati", 10)
       val velocidadDeMatiMasRapido = velocidadDeMati.copy(strokesPerMinute = 20)
-      game.registrarVelocidadDeJugador(velocidadDeMati)
-      game.registrarVelocidadDeJugador(velocidadDeMatiMasRapido)
+      game.trackPlayerSpeed(velocidadDeMati)
+      game.trackPlayerSpeed(velocidadDeMatiMasRapido)
       game.scoreboard shouldBe Scoreboard(List(velocidadDeMatiMasRapido))
     }
 
     "un jugador pasa a estar afk despues de avisarlo y desaparece del top ten" in {
       val game = new Game()
       val velocidadDeMati = PlayerSpeed("mati", 10)
-      game.registrarVelocidadDeJugador(velocidadDeMati)
+      game.trackPlayerSpeed(velocidadDeMati)
       game.scoreboard shouldBe Scoreboard(List(velocidadDeMati))
-      game.registrarJugadorAfk("mati")
+      game.trackAfkPlayer("mati")
       game.scoreboard shouldBe Scoreboard(List.empty, List(velocidadDeMati))
     }
   }

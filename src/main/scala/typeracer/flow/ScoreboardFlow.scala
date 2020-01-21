@@ -1,11 +1,15 @@
 package typeracer.flow
 
-import akka.NotUsed
+import akka.actor.typed.ActorRef
+import akka.actor.{ActorSystem, Scheduler}
 import akka.stream._
 import akka.stream.scaladsl.Source
 import akka.stream.stage._
-import typeracer.{FlowMetric, Game, PlayerSpeed, Scoreboard}
+import akka.util.Timeout
+import akka.{NotUsed, actor => classic}
+import typeracer._
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 sealed trait PlayerState
@@ -20,7 +24,9 @@ object ScoreboardFlow {
 
 case class Player(state: PlayerState, metric: PlayerSpeed)
 
-class ScoreboardFlow(afkTimeout: FiniteDuration)(implicit materializer: Materializer) extends GraphStageWithMaterializedValue[FlowShape[PlayerSpeed, Scoreboard], Source[FlowMetric, NotUsed]] {
+class ScoreboardFlow(gameCoordinator: ActorRef[GameMessage], afkTimeout: FiniteDuration)(implicit actorSystem: ActorSystem) extends GraphStageWithMaterializedValue[FlowShape[PlayerSpeed, Scoreboard], Source[FlowMetric, NotUsed]] {
+
+  implicit val materializer: Materializer = ActorMaterializer()
 
   val in = Inlet[PlayerSpeed]("Typeracer.in")
   val out = Outlet[Scoreboard]("Typeracer.out")
@@ -32,11 +38,29 @@ class ScoreboardFlow(afkTimeout: FiniteDuration)(implicit materializer: Material
 
     val logic = new TimerGraphStageLogic(shape) with InHandler with OutHandler {
 
+      implicit val timeout: Timeout = 1.seconds
+      implicit val executionContext: ExecutionContext = actorSystem.dispatcher
+      implicit val scheduler: Scheduler = actorSystem.scheduler
+
       var metricsReceived = 0
       var scoreboardEmitted = 0
       val game = new Game()
 
-      override def preStart(): Unit = queue.offer(FlowMetric.initial)
+      private lazy val self = getStageActor {
+        case (replyTo, GetScoreboard) => replyTo ! game.scoreboard
+        case _ =>
+      }
+
+      override def preStart(): Unit = {
+        gameCoordinator ! LinkStageActor(self.ref)
+        queue.offer(FlowMetric.initial)
+      }
+
+      def messageHandler(receive: (classic.ActorRef, Any)): Unit = receive match {
+        case (replyTo, GetScoreboard) =>
+          replyTo ! game.scoreboard
+        case _ =>
+      }
 
       def playerSpeedReceived(username: String): Unit = {
         metricsReceived += 1
@@ -47,7 +71,7 @@ class ScoreboardFlow(afkTimeout: FiniteDuration)(implicit materializer: Material
         val playerSpeed = grab(in)
         playerSpeedReceived(playerSpeed.username)
         val previousScoreboard = game.scoreboard
-        game.registrarVelocidadDeJugador(playerSpeed)
+        game.trackPlayerSpeed(playerSpeed)
         val scoreboard = game.scoreboard
         if (previousScoreboard != scoreboard) {
           emitScoreboard(scoreboard)
@@ -64,7 +88,7 @@ class ScoreboardFlow(afkTimeout: FiniteDuration)(implicit materializer: Material
       }
 
       private def movePlayerToAfk(username: String): Unit = {
-        game.registrarJugadorAfk(username)
+        game.trackAfkPlayer(username)
         emitScoreboard(game.scoreboard)
       }
 
@@ -77,6 +101,8 @@ class ScoreboardFlow(afkTimeout: FiniteDuration)(implicit materializer: Material
       setHandlers(in, out, this)
 
     }
+
     (logic, source)
   }
 }
+
