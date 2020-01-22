@@ -2,8 +2,7 @@ package typeracer
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest, HttpResponse}
-import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import akka.stream.{ActorMaterializer, Materializer}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,16 +16,6 @@ object Server extends App {
 
   val service: HttpRequest => Future[HttpResponse] =
     TypeRacerHandler(new TypeRacerImpl())
-
-  val route =
-    path("hello") {
-      get {
-        complete(HttpEntity(ContentTypes.`application/json`, """{"status": "ok"}"""))
-      }
-    }
-
-  val bindingFuture = Http().bindAndHandle(route, "localhost", 8081)
-
 
   val binding = Http().bindAndHandleAsync(
     service,
