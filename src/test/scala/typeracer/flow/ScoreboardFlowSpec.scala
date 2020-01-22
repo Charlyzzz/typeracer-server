@@ -1,6 +1,5 @@
 package typeracer.flow
 
-import akka.actor.ActorSystem
 import akka.actor.typed.ActorRef
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.adapter._
@@ -8,20 +7,14 @@ import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.stream.testkit.{TestPublisher, TestSubscriber}
 import akka.stream.{ActorMaterializer, Materializer}
-import extensions.ScalaTestWithActorTestKit
-import org.scalatest.BeforeAndAfterEach
+import extensions.{Extensions, ScalaTestWithActorTestKit}
 import org.scalatest.freespec.AnyFreeSpecLike
 import typeracer._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class ScoreboardFlowSpec extends ScalaTestWithActorTestKit with AnyFreeSpecLike with BeforeAndAfterEach {
-
-
-  implicit class RepeatExtension(n: Int) {
-    def times[A](block: Int => A): Unit = (1 to n).foreach(block)
-  }
+class ScoreboardFlowSpec extends ScalaTestWithActorTestKit with AnyFreeSpecLike with Extensions {
 
   "Flow" - {
 
@@ -65,9 +58,9 @@ class ScoreboardFlowSpec extends ScalaTestWithActorTestKit with AnyFreeSpecLike 
     }
 
     "flow links its stage actor to GameCoordinator" in {
-      val probe = testKit.createTestProbe[GameMessage]
-
+      val probe = testKit.createTestProbe[GameMessage]("game-probe")
       testFlow(probe.ref, 100.millis)
+
       probe.expectMessageType[LinkStageActor]
     }
 
@@ -91,10 +84,10 @@ class ScoreboardFlowSpec extends ScalaTestWithActorTestKit with AnyFreeSpecLike 
   }
 
   private def testFlow(game: ActorRef[GameMessage], afkTimeout: FiniteDuration): (TestPublisher.Probe[PlayerSpeed], TestSubscriber.Probe[Scoreboard]) = {
-    implicit val system: ActorSystem = testKit.system.toClassic
-    implicit val materializer: Materializer = ActorMaterializer()
+    implicit val untypedSystem = system.toClassic
+    implicit val materializer: Materializer = ActorMaterializer.create(untypedSystem)
 
-    TestSource.probe[PlayerSpeed](system)
+    TestSource.probe[PlayerSpeed]
       .via(new ScoreboardFlow(game, afkTimeout))
       .toMat(TestSink.probe[Scoreboard])(Keep.both)
       .run()
